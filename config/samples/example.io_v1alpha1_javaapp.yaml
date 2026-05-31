@@ -1,0 +1,37 @@
+apiVersion: example.io/v1alpha1
+kind: JavaApp
+metadata:
+  name: my-java-app
+  namespace: default
+spec:
+  # Required: OCI image reference
+  image: eclipse-temurin:21-jre
+
+  # Optional: defaults to 1
+  replicas: 2
+
+  # Optional: logical version — operator gates upgrades on readiness
+  version: "1.0.0"
+
+  # Optional: CPU and memory requests/limits
+  resources:
+    requestCpu: "500m"
+    requestMemory: "512Mi"
+    limitCpu: "2"
+    limitMemory: "1Gi"
+
+  # Optional: extra environment variables
+  env:
+    JAVA_OPTS: "-Xmx768m -XX:+UseG1GC -XX:+UseContainerSupport"
+    APP_ENV: "production"
+
+  # Required: persistent volume for stateful data
+  storage:
+    size: 10Gi
+    storageClassName: standard   # omit to use cluster default
+    accessMode: ReadWriteOnce
+    mountPath: /data
+    claimName: data
+
+  # Optional: set to true if an HPA manages replica count
+  hpaManaged: false

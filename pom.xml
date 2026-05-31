@@ -1,0 +1,263 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>io.example</groupId>
+    <artifactId>javaapp-operator</artifactId>
+    <version>0.1.0</version>
+    <packaging>jar</packaging>
+
+    <name>JavaApp Operator</name>
+    <description>Kubernetes operator for stateful Java workloads — built with JOSDK + Quarkus</description>
+
+    <!-- ================================================================
+         Properties
+         ================================================================ -->
+    <properties>
+        <!-- Java -->
+        <maven.compiler.release>21</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+        <!-- Quarkus platform — single source of truth for all versions -->
+        <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
+        <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
+        <quarkus.platform.version>3.35.3</quarkus.platform.version>
+
+        <!-- Container image defaults (override via -D on CI) -->
+        <quarkus.container-image.registry>quay.io</quarkus.container-image.registry>
+        <quarkus.container-image.group>muvhulawamuthula</quarkus.container-image.group>
+        <quarkus.container-image.name>javaapp-operator</quarkus.container-image.name>
+        <quarkus.container-image.tag>${project.version}</quarkus.container-image.tag>
+
+        <!-- Plugin versions -->
+        <compiler-plugin.version>3.15.0</compiler-plugin.version>
+        <surefire-plugin.version>3.5.4</surefire-plugin.version>
+
+        <!-- Skip ITs by default; enabled in the native profile or via -DskipITs=false -->
+        <skipITs>true</skipITs>
+    </properties>
+
+    <!-- ================================================================
+         BOM imports — order matters: quarkus-bom first, then operator-sdk-bom
+         ================================================================ -->
+    <dependencyManagement>
+        <dependencies>
+            <!-- Quarkus platform BOM -->
+            <dependency>
+                <groupId>${quarkus.platform.group-id}</groupId>
+                <artifactId>${quarkus.platform.artifact-id}</artifactId>
+                <version>${quarkus.platform.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <!-- Operator SDK BOM — pins JOSDK, Fabric8, and bundle-generator versions -->
+            <dependency>
+                <groupId>${quarkus.platform.group-id}</groupId>
+                <artifactId>quarkus-operator-sdk-bom</artifactId>
+                <version>${quarkus.platform.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <!-- ================================================================
+         Dependencies
+         ================================================================ -->
+    <dependencies>
+
+        <!-- ── Operator SDK core ────────────────────────────────────── -->
+        <dependency>
+            <groupId>io.quarkiverse.operatorsdk</groupId>
+            <artifactId>quarkus-operator-sdk</artifactId>
+        </dependency>
+
+        <!-- OLM bundle + CSV generation at build time -->
+        <dependency>
+            <groupId>io.quarkiverse.operatorsdk</groupId>
+            <artifactId>quarkus-operator-sdk-bundle-generator</artifactId>
+        </dependency>
+
+        <!-- Fabric8 CRD generator annotations (@Required, @Min, @Pattern,
+             @PrinterColumn, …) used to enrich the generated CRD schema -->
+        <dependency>
+            <groupId>io.fabric8</groupId>
+            <artifactId>generator-annotations</artifactId>
+        </dependency>
+
+        <!-- ── Quarkus runtime ──────────────────────────────────────── -->
+        <!-- CDI / dependency injection -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-arc</artifactId>
+        </dependency>
+
+        <!-- Structured JSON logging — required for production / OpenShift -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-logging-json</artifactId>
+        </dependency>
+
+        <!-- Health endpoints (/q/health/live, /q/health/ready)
+             — OLM liveness/readiness probes point here -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-smallrye-health</artifactId>
+        </dependency>
+
+        <!-- Micrometer metrics — scraped by the ServiceMonitor generated by the bundle -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-micrometer-registry-prometheus</artifactId>
+        </dependency>
+
+        <!-- Container image build via Jib (no Docker daemon needed on CI) -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-container-image-jib</artifactId>
+        </dependency>
+
+        <!-- ── Testing ──────────────────────────────────────────────── -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-junit</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- JOSDK integration test harness (real cluster / envtest) -->
+        <dependency>
+            <groupId>io.javaoperatorsdk</groupId>
+            <artifactId>operator-framework-junit-5</artifactId>
+            <version>5.2.3</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Awaility — fluent async assertions in integration tests -->
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- AssertJ — fluent assertions -->
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <version>3.25.3</version>
+            <scope>test</scope>
+        </dependency>
+
+    </dependencies>
+
+    <!-- ================================================================
+         Build plugins
+         ================================================================ -->
+    <build>
+        <plugins>
+
+            <!-- Quarkus Maven plugin — build, CRD generation, bundle generation -->
+            <plugin>
+                <groupId>${quarkus.platform.group-id}</groupId>
+                <artifactId>quarkus-maven-plugin</artifactId>
+                <version>${quarkus.platform.version}</version>
+                <extensions>true</extensions>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>build</goal>
+                            <goal>generate-code</goal>
+                            <goal>generate-code-tests</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Compiler — -parameters preserves method param names (required by Quarkus CDI) -->
+            <plugin>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>${compiler-plugin.version}</version>
+                <configuration>
+                    <compilerArgs>
+                        <arg>-parameters</arg>
+                    </compilerArgs>
+                </configuration>
+            </plugin>
+
+            <!-- Surefire — unit tests -->
+            <plugin>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>${surefire-plugin.version}</version>
+                <configuration>
+                    <systemPropertyVariables>
+                        <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
+                        <maven.home>${maven.home}</maven.home>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
+
+            <!-- Failsafe — integration tests (*IT.java).
+                 Run with: mvn verify -DskipITs=false
+                 On CI against a real cluster: mvn verify -DskipITs=false -Dkubeconfig=... -->
+            <plugin>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>${surefire-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <systemPropertyVariables>
+                        <native.image.path>${project.build.directory}/${project.build.finalName}-runner</native.image.path>
+                        <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
+                        <maven.home>${maven.home}</maven.home>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
+
+        </plugins>
+    </build>
+
+    <!-- ================================================================
+         Profiles
+         ================================================================ -->
+    <profiles>
+
+        <!-- Native binary — GraalVM / Mandrel
+             Usage: mvn package -Pnative
+             Or:    mvn package -Dnative (activates this profile via the property trigger) -->
+        <profile>
+            <id>native</id>
+            <activation>
+                <property>
+                    <name>native</name>
+                </property>
+            </activation>
+            <properties>
+                <skipITs>false</skipITs>
+                <quarkus.native.enabled>true</quarkus.native.enabled>
+            </properties>
+        </profile>
+
+        <!-- CI — push container image to registry
+             Usage: mvn package -Pci -Dquarkus.container-image.push=true -->
+        <profile>
+            <id>ci</id>
+            <properties>
+                <quarkus.container-image.build>true</quarkus.container-image.build>
+                <quarkus.container-image.push>true</quarkus.container-image.push>
+                <!-- tag both :0.1.0-SNAPSHOT and :latest on main branch -->
+                <quarkus.container-image.additional-tags>latest</quarkus.container-image.additional-tags>
+                <skipITs>false</skipITs>
+            </properties>
+        </profile>
+
+    </profiles>
+
+</project>
