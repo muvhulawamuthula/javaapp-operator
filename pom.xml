@@ -224,6 +224,33 @@
                 </configuration>
             </plugin>
 
+            <!-- The JOSDK test harness (LocallyRunOperatorExtension) loads the CRD from
+                 META-INF/fabric8 on the classpath, but Quarkus generates it to target/kubernetes.
+                 Copy it across before the integration test so the harness can apply it. -->
+            <plugin>
+                <artifactId>maven-resources-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>copy-crd-onto-test-classpath</id>
+                        <phase>pre-integration-test</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.outputDirectory}/META-INF/fabric8</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.build.directory}/kubernetes</directory>
+                                    <includes>
+                                        <include>javaapps.example.io-v1.yml</include>
+                                    </includes>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
         </plugins>
     </build>
 
