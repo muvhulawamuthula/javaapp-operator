@@ -127,11 +127,14 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- JOSDK integration test harness (real cluster / envtest) -->
+        <!-- JOSDK integration test harness (real cluster / envtest).
+             In JOSDK 5.3 this module was renamed operator-framework-junit-5 -> operator-framework-junit.
+             Pinned to match the operator-framework-core version the Quarkus operator-sdk BOM brings
+             in (5.3.3); a version mismatch fails the IT at runtime with NoClassDefFoundError. -->
         <dependency>
             <groupId>io.javaoperatorsdk</groupId>
-            <artifactId>operator-framework-junit-5</artifactId>
-            <version>5.2.3</version>
+            <artifactId>operator-framework-junit</artifactId>
+            <version>5.3.3</version>
             <scope>test</scope>
         </dependency>
 
